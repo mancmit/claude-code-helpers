@@ -9,6 +9,7 @@ A collection of hooks, scripts, and utilities to enhance your [Claude Code](http
 | Hook | Description |
 |------|-------------|
 | [log-bash](hooks/log-bash/) | Automatically log all Bash commands executed by Claude Code to daily Markdown files. Useful for auditing, reviewing, and debugging. |
+| [notify-secret-read](hooks/notify-secret-read/) | Notify when Claude Code reads secret/credential files (`.env`, `*.pem`, AWS credentials, etc.) via macOS notification and terminal bell. |
 
 ## Getting started
 
@@ -24,8 +25,12 @@ Each hook/utility has its own README with detailed setup instructions. Browse th
 ```
 claude-code-helpers/
 ├── hooks/
-│   └── log-bash/          # Log all Bash commands to markdown
-│       ├── log-bash.sh
+│   ├── log-bash/                # Log all Bash commands to markdown
+│   │   ├── log-bash.sh
+│   │   ├── settings-snippet.json
+│   │   └── README.md
+│   └── notify-secret-read/      # Notify on secret/credential file reads
+│       ├── notify-secret-read.sh
 │       ├── settings-snippet.json
 │       └── README.md
 └── README.md

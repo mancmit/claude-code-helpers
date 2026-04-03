@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:3456/hooks/pre-tool-use",
+            "timeout": 10,
+            "statusMessage": "Checking policy..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:3456/hooks/post-tool-use",
+            "timeout": 10,
+            "statusMessage": "Validating code quality..."
+          }
+        ]
+      }
+    ]
+  }
+}

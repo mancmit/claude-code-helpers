@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Policy Enforcement - Admin UI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
+
+  <!-- Header -->
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-4">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">P</div>
+        <h1 class="text-lg font-semibold">Policy Enforcement</h1>
+        <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">Admin</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-xs text-gray-500" x-text="'Uptime: ' + health.uptime"></span>
+        <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="bg-gray-900 border-b border-gray-800 px-6">
+    <div class="max-w-7xl mx-auto flex gap-1">
+      <template x-for="tab in ['dashboard', 'policies', 'audit']">
+        <button
+          @click="activeTab = tab"
+          :class="activeTab === tab ? 'text-indigo-400 border-indigo-400' : 'text-gray-500 border-transparent hover:text-gray-300'"
+          class="px-4 py-3 text-sm font-medium border-b-2 capitalize transition-colors"
+          x-text="tab">
+        </button>
+      </template>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 py-6">
+
+    <!-- Dashboard Tab -->
+    <div x-show="activeTab === 'dashboard'">
+      <!-- Stats Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div class="text-2xl font-bold text-green-400" x-text="stats.allowed">0</div>
+          <div class="text-xs text-gray-500 mt-1">Allowed Today</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div class="text-2xl font-bold text-red-400" x-text="stats.denied">0</div>
+          <div class="text-xs text-gray-500 mt-1">Denied Today</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div class="text-2xl font-bold text-orange-400" x-text="stats.blocked">0</div>
+          <div class="text-xs text-gray-500 mt-1">Blocked Today</div>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div class="text-2xl font-bold text-indigo-400" x-text="stats.policies">0</div>
+          <div class="text-xs text-gray-500 mt-1">Active Policies</div>
+        </div>
+      </div>
+
+      <!-- Recent Violations -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl">
+        <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+          <h2 class="text-sm font-semibold">Recent Violations</h2>
+          <span class="text-xs text-gray-500">Live feed</span>
+        </div>
+        <div class="divide-y divide-gray-800 max-h-96 overflow-y-auto">
+          <template x-if="violations.length === 0">
+            <div class="px-4 py-8 text-center text-gray-600 text-sm">No violations yet</div>
+          </template>
+          <template x-for="v in violations" :key="v.timestamp">
+            <div class="px-4 py-3 flex items-start gap-3 hover:bg-gray-800/50">
+              <span class="mt-0.5 w-2 h-2 rounded-full shrink-0"
+                :class="v.decision === 'deny' ? 'bg-red-500' : v.decision === 'block' ? 'bg-orange-500' : 'bg-yellow-500'"></span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-medium" x-text="v.policy_name || 'Unknown'"></span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-mono"
+                    :class="v.decision === 'deny' ? 'bg-red-500/20 text-red-400' : v.decision === 'block' ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'"
+                    x-text="v.decision"></span>
+                  <span class="text-xs text-gray-600 px-1.5 py-0.5 bg-gray-800 rounded" x-text="v.tool_name"></span>
+                </div>
+                <div class="text-xs text-gray-400 mt-1 truncate font-mono" x-text="v.detail"></div>
+                <div class="text-xs text-gray-600 mt-1" x-text="formatTime(v.timestamp)"></div>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Policies Tab -->
+    <div x-show="activeTab === 'policies'">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold">Policy Configuration</h2>
+        <button @click="reloadPolicies()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+          Reload from YAML
+        </button>
+      </div>
+      <div class="space-y-2">
+        <template x-for="p in policies" :key="p.name">
+          <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div class="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-800/50"
+                 @click="p._expanded = !p._expanded">
+              <div class="flex items-center gap-3">
+                <span class="w-2 h-2 rounded-full" :class="p.enabled ? 'bg-green-500' : 'bg-gray-600'"></span>
+                <span class="text-sm font-medium" x-text="p.name"></span>
+                <span class="text-xs text-gray-600 px-1.5 py-0.5 bg-gray-800 rounded" x-text="p.event"></span>
+                <span class="text-xs text-gray-600 px-1.5 py-0.5 bg-gray-800 rounded"
+                  x-text="Array.isArray(p.tool) ? p.tool.join(', ') : p.tool"></span>
+                <span class="text-xs px-1.5 py-0.5 rounded"
+                  :class="p.action === 'deny' ? 'bg-red-500/20 text-red-400' : p.action === 'block' ? 'bg-orange-500/20 text-orange-400' : 'bg-yellow-500/20 text-yellow-400'"
+                  x-text="p.action"></span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-gray-500" x-text="p.rules_count + ' rules'"></span>
+                <button @click.stop="togglePolicy(p.name)"
+                  class="text-xs px-3 py-1 rounded-lg transition-colors"
+                  :class="p.enabled ? 'bg-green-600/20 text-green-400 hover:bg-green-600/30' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'"
+                  x-text="p.enabled ? 'Enabled' : 'Disabled'">
+                </button>
+              </div>
+            </div>
+            <div x-show="p._expanded" x-transition class="px-4 py-3 border-t border-gray-800 bg-gray-950/50">
+              <div class="text-xs text-gray-400 mb-2" x-text="p.reason"></div>
+              <div class="text-xs text-gray-600">Rules: <span x-text="p.rules_count"></span></div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Audit Log Tab -->
+    <div x-show="activeTab === 'audit'">
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-3 mb-4">
+        <select x-model="auditFilters.decision" @change="fetchAudit()"
+          class="text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-gray-300">
+          <option value="">All decisions</option>
+          <option value="allow">Allow</option>
+          <option value="deny">Deny</option>
+          <option value="block">Block</option>
+          <option value="warn">Warn</option>
+        </select>
+        <select x-model="auditFilters.tool" @change="fetchAudit()"
+          class="text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-gray-300">
+          <option value="">All tools</option>
+          <option value="Bash">Bash</option>
+          <option value="Read">Read</option>
+          <option value="Write">Write</option>
+          <option value="Edit">Edit</option>
+          <option value="WebFetch">WebFetch</option>
+        </select>
+        <input type="text" placeholder="Session ID" x-model="auditFilters.session" @input.debounce.500ms="fetchAudit()"
+          class="text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-gray-300 w-36">
+        <input type="date" x-model="auditFilters.from" @change="fetchAudit()"
+          class="text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-gray-300">
+        <input type="date" x-model="auditFilters.to" @change="fetchAudit()"
+          class="text-xs bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-gray-300">
+        <button @click="exportAudit()" class="text-xs bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors ml-auto">
+          Export JSON
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-800/50">
+            <tr>
+              <th class="px-4 py-2 text-left text-gray-500 font-medium">Time</th>
+              <th class="px-4 py-2 text-left text-gray-500 font-medium">Decision</th>
+              <th class="px-4 py-2 text-left text-gray-500 font-medium">Policy</th>
+              <th class="px-4 py-2 text-left text-gray-500 font-medium">Tool</th>
+              <th class="px-4 py-2 text-left text-gray-500 font-medium">Detail</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-800">
+            <template x-if="auditEntries.length === 0">
+              <tr><td colspan="5" class="px-4 py-8 text-center text-gray-600">No entries found</td></tr>
+            </template>
+            <template x-for="(e, idx) in auditEntries" :key="e.timestamp + e.detail + idx">
+              <tr class="hover:bg-gray-800/30 cursor-pointer" @click="e._expanded = !e._expanded">
+                <td class="px-4 py-2 text-gray-400 whitespace-nowrap" x-text="formatTime(e.timestamp)"></td>
+                <td class="px-4 py-2">
+                  <span class="px-1.5 py-0.5 rounded text-xs"
+                    :class="{
+                      'bg-green-500/20 text-green-400': e.decision === 'allow',
+                      'bg-red-500/20 text-red-400': e.decision === 'deny',
+                      'bg-orange-500/20 text-orange-400': e.decision === 'block',
+                      'bg-yellow-500/20 text-yellow-400': e.decision === 'warn'
+                    }"
+                    x-text="e.decision"></span>
+                </td>
+                <td class="px-4 py-2 text-gray-300" x-text="e.policy_name || '-'"></td>
+                <td class="px-4 py-2">
+                  <span class="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400" x-text="e.tool_name"></span>
+                </td>
+                <td class="px-4 py-2 font-mono max-w-md">
+                  <!-- Collapsed: one-line preview -->
+                  <div x-show="!e._expanded" class="truncate text-gray-400">
+                    <span class="text-gray-600 select-none" x-text="detailPrefix(e)"></span>
+                    <span x-text="e.detail"></span>
+                  </div>
+                  <!-- Expanded: full detail + reason -->
+                  <div x-show="e._expanded" x-transition>
+                    <div class="break-all text-gray-300 bg-gray-950 rounded-lg p-2 border border-gray-800">
+                      <span class="text-gray-500 select-none" x-text="detailPrefix(e)"></span><span x-text="e.detail"></span>
+                    </div>
+                    <template x-if="e.reason">
+                      <div class="mt-1.5 text-yellow-500/80 text-xs flex items-start gap-1">
+                        <span class="shrink-0">&#9888;</span>
+                        <span x-text="e.reason"></span>
+                      </div>
+                    </template>
+                    <div class="mt-1 text-gray-600 text-xs" x-text="'session: ' + e.session_id"></div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between mt-4">
+        <span class="text-xs text-gray-500" x-text="`${auditTotal} total entries`"></span>
+        <div class="flex gap-2">
+          <button @click="auditOffset = Math.max(0, auditOffset - 50); fetchAudit()"
+            :disabled="auditOffset === 0"
+            class="text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+            Previous
+          </button>
+          <button @click="auditOffset += 50; fetchAudit()"
+            :disabled="auditOffset + 50 >= auditTotal"
+            class="text-xs bg-gray-800 hover:bg-gray-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

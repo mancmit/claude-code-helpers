@@ -1,0 +1,114 @@
+version: 1
+
+audit:
+  enabled: true
+  log_file: audit.jsonl
+
+policies:
+  # ── Destructive Commands ──────────────────────────────────────────
+  - name: Block destructive commands
+    enabled: true
+    event: PreToolUse
+    tool: Bash
+    action: deny
+    reason: Destructive shell commands are not allowed
+    rules:
+      - pattern: "rm\\s+(-[a-zA-Z]*)?\\s*-[a-zA-Z]*r"
+        flags: i
+        except: "rm -rf node_modules|rm -rf dist|rm -rf build|rm -rf .cache|rm -rf coverage"
+      - pattern: "mkfs\\."
+      - pattern: "dd\\s+if="
+      - pattern: ":(){ :\\|:& };:"
+      - pattern: "chmod\\s+(-R\\s+)?777"
+      - pattern: ">\\/dev\\/sd[a-z]"
+
+  # ── Force Operations ──────────────────────────────────────────────
+  - name: Block force operations
+    enabled: true
+    event: PreToolUse
+    tool: Bash
+    action: deny
+    reason: Force push and force operations are dangerous
+    rules:
+      - pattern: "git\\s+push.*--force(?!-with-lease)"
+      - pattern: "git\\s+push.*-f\\b"
+        except: "git push -f origin feature/"
+      - pattern: "git\\s+reset\\s+--hard"
+      - pattern: "git\\s+clean\\s+-fd"
+
+  # ── Destructive SQL ───────────────────────────────────────────────
+  - name: Block destructive SQL
+    enabled: true
+    event: PreToolUse
+    tool: Bash
+    action: deny
+    reason: Destructive SQL operations are not allowed without confirmation
+    rules:
+      - pattern: "DROP\\s+(TABLE|DATABASE|INDEX)"
+        flags: i
+      - pattern: "TRUNCATE\\s+TABLE"
+        flags: i
+      - pattern: "DELETE\\s+FROM\\s+\\w+\\s*$"
+        flags: im
+
+  # ── Secret File Access ────────────────────────────────────────────
+  - name: Block secret file access
+    enabled: true
+    event: PreToolUse
+    tool:
+      - Read
+      - Glob
+    action: deny
+    reason: Reading secret/credential files is restricted
+    rules:
+      - pattern: "\\.env(\\.local|\\.production|\\.staging)?$"
+        flags: i
+        except: "\\.env\\.example$"
+      - pattern: "(id_rsa|id_ed25519|id_ecdsa)$"
+      - pattern: "\\.(pem|key|p12|pfx|keystore)$"
+        flags: i
+      - pattern: "credentials\\.json$"
+      - pattern: "\\.aws/credentials$"
+      - pattern: "\\.kube/config$"
+
+  # ── Write Outside Project ─────────────────────────────────────────
+  - name: Block write outside project
+    enabled: true
+    event: PreToolUse
+    tool:
+      - Write
+      - Edit
+    action: deny
+    reason: Writing files outside the project directory is not allowed
+    rules:
+      - type: path_outside_cwd
+        except_path:
+          - /tmp
+          - /var/tmp
+
+  # ── No Hardcoded Secrets ──────────────────────────────────────────
+  - name: No hardcoded secrets
+    enabled: true
+    event: PostToolUse
+    tool:
+      - Write
+      - Edit
+    action: block
+    reason: Hardcoded secrets detected in code
+    rules:
+      - pattern: "AKIA[0-9A-Z]{16}"
+        except: "test|mock|fake|example"
+      - pattern: "-----BEGIN (RSA |EC )?PRIVATE KEY-----"
+        except_path:
+          - "\\.test\\."
+          - "\\.spec\\."
+          - "__tests__"
+          - "fixtures"
+      - pattern: "(password|secret|api_key|apikey|token)\\s*[:=]\\s*[\"'][^\"']{8,}[\"']"
+        flags: i
+        except: "process\\.env|\\$\\{|example|placeholder|changeme|your[-_]"
+        except_path:
+          - "\\.test\\."
+          - "\\.spec\\."
+          - "\\.example"
+          - "README"

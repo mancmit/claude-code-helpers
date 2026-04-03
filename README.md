@@ -10,6 +10,7 @@ A collection of hooks, scripts, and utilities to enhance your [Claude Code](http
 |------|-------------|
 | [log-bash](hooks/log-bash/) | Automatically log all Bash commands executed by Claude Code to daily Markdown files. Useful for auditing, reviewing, and debugging. |
 | [notify-secret-read](hooks/notify-secret-read/) | Notify when Claude Code reads secret/credential files (`.env`, `*.pem`, AWS credentials, etc.) via macOS notification and terminal bell. |
+| [enforce-policy](hooks/enforce-policy/) | HTTP-based policy enforcement server with Admin UI. Block dangerous commands, restrict file access, and enforce code quality via configurable YAML policies. |
 
 ## Getting started
 
@@ -29,8 +30,16 @@ claude-code-helpers/
 │   │   ├── log-bash.sh
 │   │   ├── settings-snippet.json
 │   │   └── README.md
-│   └── notify-secret-read/      # Notify on secret/credential file reads
-│       ├── notify-secret-read.sh
+│   ├── notify-secret-read/      # Notify on secret/credential file reads
+│   │   ├── notify-secret-read.sh
+│   │   ├── settings-snippet.json
+│   │   └── README.md
+│   └── enforce-policy/          # HTTP policy enforcement server + Admin UI
+│       ├── server/              # Node.js/TypeScript server
+│       │   ├── package.json
+│       │   ├── tsconfig.json
+│       │   └── src/
+│       ├── policies.example.yml
 │       ├── settings-snippet.json
 │       └── README.md
 └── README.md

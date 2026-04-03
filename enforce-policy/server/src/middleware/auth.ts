@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -13,9 +14,8 @@ interface AdminUser {
   password: string;
 }
 
-interface Session {
+interface JwtPayload {
   username: string;
-  createdAt: number;
 }
 
 // Extend Express Request to carry auth info
@@ -67,7 +67,10 @@ let apiKeys: ApiKey[] = [];
 let adminUsers: AdminUser[] = [];
 let apiKeyAuthEnabled = false;
 let adminAuthEnabled = false;
-const sessions = new Map<string, Session>();
+
+// JWT secret: use env var for persistence across restarts, or generate random
+let jwtSecret: string = "";
+const JWT_EXPIRY = "24h";
 
 /**
  * Initialize auth from environment variables.
@@ -86,6 +89,9 @@ export function initAuth(): void {
   // Effective auth state: explicit flag overrides auto-detect
   apiKeyAuthEnabled = authEnabled === false ? false : apiKeys.length > 0;
   adminAuthEnabled = authEnabled === false ? false : adminUsers.length > 0;
+
+  // JWT secret: prefer env var (stable across restarts), fallback to random
+  jwtSecret = process.env.JWT_SECRET || randomBytes(32).toString("hex");
 }
 
 export function isAuthEnabled(): boolean {
@@ -140,9 +146,18 @@ export function apiKeyAuth(
 
 // ── Admin auth middleware (for /api/*) ─────────────────────────────
 
-function validateToken(token: string | undefined): Session | null {
+function verifyToken(token: string | undefined): JwtPayload | null {
   if (!token) return null;
-  return sessions.get(token) ?? null;
+  try {
+    const payload = jwt.verify(token, jwtSecret) as JwtPayload;
+    // Check user still exists in ADMIN_USERS
+    if (!adminUsers.some((u) => u.username === payload.username)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 export function adminAuth(
@@ -165,8 +180,8 @@ export function adminAuth(
     token = String(req.query.token);
   }
 
-  const session = validateToken(token);
-  if (!session) {
+  const payload = verifyToken(token);
+  if (!payload) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -193,19 +208,19 @@ export function loginHandler(req: Request, res: Response): void {
     return;
   }
 
-  const token = randomUUID();
-  sessions.set(token, { username: user.username, createdAt: Date.now() });
+  const token = jwt.sign(
+    { username: user.username } satisfies JwtPayload,
+    jwtSecret,
+    { expiresIn: JWT_EXPIRY }
+  );
 
   res.json({ token, username: user.username });
 }
 
 // ── Logout handler ─────────────────────────────────────────────────
 
-export function logoutHandler(req: Request, res: Response): void {
-  const auth = req.headers.authorization;
-  if (auth?.startsWith("Bearer ")) {
-    sessions.delete(auth.slice(7));
-  }
+export function logoutHandler(_req: Request, res: Response): void {
+  // JWT is stateless — client discards the token
   res.json({ message: "Logged out" });
 }
 
@@ -224,11 +239,11 @@ export function meHandler(req: Request, res: Response): void {
     return;
   }
 
-  const session = sessions.get(auth.slice(7));
-  if (!session) {
+  const payload = verifyToken(auth.slice(7));
+  if (!payload) {
     res.json({ authRequired: true });
     return;
   }
 
-  res.json({ authRequired: true, username: session.username });
+  res.json({ authRequired: true, username: payload.username });
 }

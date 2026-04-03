@@ -42,7 +42,7 @@ HTTP-based policy enforcement server for Claude Code. Block dangerous commands, 
 ## File structure
 
 ```
-hooks/enforce-policy/
+enforce-policy/
 ├── server/
 │   ├── package.json
 │   ├── tsconfig.json
@@ -74,14 +74,14 @@ hooks/enforce-policy/
 ### 1. Install dependencies
 
 ```bash
-cd hooks/enforce-policy/server
+cd enforce-policy/server
 npm install
 ```
 
 ### 2. Create policy file
 
 ```bash
-cd hooks/enforce-policy
+cd enforce-policy
 cp policies.example.yml policies.yml
 # Edit policies.yml to customize rules
 ```
@@ -91,7 +91,7 @@ cp policies.example.yml policies.yml
 ### 3. Start the server
 
 ```bash
-cd hooks/enforce-policy/server
+cd enforce-policy/server
 npm run dev
 ```
 
@@ -225,7 +225,7 @@ Install for all Claude Code sessions:
 
 1. Start the server (keep running):
    ```bash
-   cd hooks/enforce-policy/server && npm run dev
+   cd enforce-policy/server && npm run dev
    ```
 
 2. Add hooks to `~/.claude/settings.json`:
@@ -313,7 +313,7 @@ Edit `policies.yml` and add `except` patterns to rules, or disable the policy:
 ### Build for production
 
 ```bash
-cd hooks/enforce-policy/server
+cd enforce-policy/server
 npm run build
 npm start
 ```

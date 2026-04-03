@@ -8,6 +8,7 @@ HTTP-based policy enforcement server for Claude Code. Block dangerous commands, 
 - [Prerequisites](#prerequisites)
 - [File structure](#file-structure)
 - [Quick start](#quick-start)
+- [Authentication](#authentication)
 - [Policy configuration](#policy-configuration)
 - [Admin UI](#admin-ui)
 - [API reference](#api-reference)
@@ -46,10 +47,13 @@ enforce-policy/
 ├── server/
 │   ├── package.json
 │   ├── tsconfig.json
+│   ├── .env.example              # Environment variables template
 │   └── src/
 │       ├── index.ts              # Express server entry point
 │       ├── engine.ts             # Policy loading + evaluation engine
 │       ├── logger.ts             # Audit logger (JSONL + ring buffer + SSE)
+│       ├── middleware/
+│       │   └── auth.ts           # API key + admin auth middleware
 │       ├── handlers/
 │       │   ├── pre-tool-use.ts   # PreToolUse hook handler
 │       │   └── post-tool-use.ts  # PostToolUse hook handler
@@ -95,7 +99,7 @@ cd enforce-policy/server
 npm run dev
 ```
 
-The server starts on `http://localhost:3456` by default. Set `POLICY_PORT` env var to change.
+The server starts on `http://localhost:3456` by default. Set `POLICY_PORT` to change port, `POLICY_HOST` to change bind address (e.g. `0.0.0.0` for remote access).
 
 ### 4. Configure Claude Code
 
@@ -119,6 +123,100 @@ curl -s -X POST http://localhost:3456/hooks/pre-tool-use \
 ```
 
 Open `http://localhost:3456` to see the Admin UI.
+
+## Authentication
+
+Authentication is **optional** and configured via environment variables. When no env vars are set, the server runs without auth (backward compatible for local use).
+
+### Enable/disable auth
+
+Use `AUTH_ENABLED` for explicit control:
+
+| `AUTH_ENABLED` | Behavior |
+|----------------|----------|
+| Not set | Auto-detect: auth is enabled if `API_KEYS` or `ADMIN_USERS` is set |
+| `true` | Same as auto-detect (explicit opt-in) |
+| `false` | Force-disable auth even if keys/users are configured |
+
+```bash
+# Force-disable auth (e.g. for local development)
+AUTH_ENABLED=false npm run dev
+```
+
+There are two types of env vars — **server-side** (read from `.env` file via dotenv) and **client-side** (must be in Claude Code's process environment):
+
+### Server-side: API Key auth (hook endpoints)
+
+Protects `/hooks/*` endpoints so only authorized Claude Code clients can send hook requests.
+
+Add to `enforce-policy/server/.env`:
+
+```env
+# Format: API_KEYS="name1:secret1,name2:secret2"
+API_KEYS="dev-laptop:mysecret123,ci-server:othersecret456"
+```
+
+The API key name (e.g. `dev-laptop`) is recorded in the audit log for traceability.
+
+### Server-side: Admin auth (UI + API)
+
+Protects the Admin UI and `/api/*` endpoints with username/password login.
+
+Add to `enforce-policy/server/.env`:
+
+```env
+# Format: ADMIN_USERS="user1:password1,user2:password2"
+ADMIN_USERS="admin:strongpassword,viewer:viewerpass"
+```
+
+When configured, the Admin UI shows a login form. Sessions are stored in memory (server restart requires re-login).
+
+### Client-side: Claude Code API key
+
+Claude Code sends the API key via the `X-API-Key` header (configured in `settings-snippet.json`). This env var must be available in **Claude Code's process environment**, not the server's.
+
+**Important:** Setting `export VAR=...` in an interactive terminal only affects that session. Claude Code (especially when launched from VS Code or another IDE) runs in a separate process and won't inherit it.
+
+Add to `~/.zshenv` (macOS/zsh) so **all** processes receive it:
+
+```bash
+echo 'export CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY=mysecret123' >> ~/.zshenv
+```
+
+For bash users, add to `~/.bashrc` or `~/.bash_profile` instead.
+
+> **After adding the env var, restart Claude Code** (or your IDE) for it to take effect.
+
+### Full example
+
+Server `.env` file (`enforce-policy/server/.env`):
+
+```env
+AUTH_ENABLED=true
+API_KEYS="dev:key123,ci:key456"
+ADMIN_USERS="admin:adminpass"
+```
+
+Client (`~/.zshenv`):
+
+```bash
+export CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY=key123
+```
+
+Then start the server:
+
+```bash
+cd enforce-policy/server
+npm run dev
+```
+
+### Behavior summary
+
+| Env var | Not set | Set |
+|---------|---------|-----|
+| `AUTH_ENABLED` | Auto-detect from keys/users | `true` = enable, `false` = force-disable |
+| `API_KEYS` | Hook endpoints open (no auth) | Requires `X-API-Key` or `Authorization: Bearer` header |
+| `ADMIN_USERS` | Admin UI/API open (no auth) | Requires login via UI or `Authorization: Bearer` token |
 
 ## Policy configuration
 
@@ -206,7 +304,15 @@ Open `http://localhost:3456` in your browser.
 | POST | `/hooks/pre-tool-use` | Evaluate PreToolUse policies |
 | POST | `/hooks/post-tool-use` | Evaluate PostToolUse policies |
 
-### Admin endpoints
+### Auth endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/login` | Login with `{ username, password }`, returns `{ token, username }` |
+| POST | `/api/auth/logout` | Invalidate session token |
+| GET | `/api/auth/me` | Check auth status, returns `{ authRequired, username? }` |
+
+### Admin endpoints (requires admin auth when `ADMIN_USERS` is set)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -216,8 +322,8 @@ Open `http://localhost:3456` in your browser.
 | POST | `/api/policies/reload` | Reload from YAML |
 | GET | `/api/audit?limit=50&offset=0&decision=deny&tool=Bash` | Query audit log |
 | GET | `/api/audit/stats` | Today's stats |
-| GET | `/api/audit/stream` | SSE realtime feed |
-| GET | `/api/health` | Server health check |
+| GET | `/api/audit/stream` | SSE realtime feed (pass `?token=xxx` for auth) |
+| GET | `/api/health` | Server health check (no auth required) |
 
 ## Setup (Global)
 
@@ -240,7 +346,11 @@ Install for all Claude Code sessions:
                "type": "http",
                "url": "http://localhost:3456/hooks/pre-tool-use",
                "timeout": 10,
-               "statusMessage": "Checking policy..."
+               "statusMessage": "Checking policy...",
+               "headers": {
+                 "X-API-Key": "$CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY"
+               },
+               "allowedEnvVars": ["CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY"]
              }
            ]
          }
@@ -253,7 +363,11 @@ Install for all Claude Code sessions:
                "type": "http",
                "url": "http://localhost:3456/hooks/post-tool-use",
                "timeout": 10,
-               "statusMessage": "Validating code quality..."
+               "statusMessage": "Validating code quality...",
+               "headers": {
+                 "X-API-Key": "$CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY"
+               },
+               "allowedEnvVars": ["CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY"]
              }
            ]
          }
@@ -261,6 +375,12 @@ Install for all Claude Code sessions:
      }
    }
    ```
+
+   If using API key auth, add the env var to `~/.zshenv` (see [Authentication](#authentication) for details):
+   ```bash
+   echo 'export CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY=your-secret-key' >> ~/.zshenv
+   ```
+   Then restart Claude Code / your IDE.
 
 ## Setup (Per-project)
 
@@ -270,6 +390,16 @@ Install for a specific project only:
 2. Add the same hook config to `.claude/settings.local.json` in your project root
 
 ## Troubleshooting
+
+### Remote deployment
+
+To allow remote clients to connect, bind the server to all interfaces:
+
+```bash
+POLICY_HOST=0.0.0.0 npm run dev
+```
+
+> **Warning:** When binding to `0.0.0.0`, always enable authentication (`API_KEYS` + `ADMIN_USERS`) and use a reverse proxy (nginx, Caddy) with HTTPS in front.
 
 ### Server won't start
 
@@ -300,6 +430,23 @@ curl -s http://localhost:3456/api/health
 # Check Claude Code hook config
 cat ~/.claude/settings.json | jq '.hooks'
 ```
+
+### "PreToolUse hook error" or 401 from hooks
+
+This usually means the `CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY` env var is not available in Claude Code's process, even if it works in your terminal.
+
+```bash
+# Verify the server requires API key auth
+curl -s -w "\nHTTP %{http_code}" -X POST http://localhost:3456/hooks/pre-tool-use \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name":"Bash","tool_input":{"command":"echo test"}}'
+# If you see "API key required" / HTTP 401, auth is active
+
+# Verify the env var is set in your shell profile (not just the current session)
+grep CLAUDE_CODE_ENFORCE_POLICY_SERVER_API_KEY ~/.zshenv ~/.zshrc ~/.bashrc 2>/dev/null
+```
+
+**Fix:** Add the env var to `~/.zshenv` and restart Claude Code (see [Authentication](#authentication)).
 
 ### Too many false positives
 

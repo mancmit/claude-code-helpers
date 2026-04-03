@@ -14,6 +14,7 @@ export interface AuditEntry {
   reason?: string;
   detail: string;
   cwd: string;
+  api_key_name?: string;
 }
 
 export interface AuditFilters {

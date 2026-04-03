@@ -1,6 +1,7 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, copyFileSync } from "node:fs";
+import dotenv from "dotenv";
 import express from "express";
 import { loadPolicies, watchPolicies, getPolicies } from "./engine.js";
 import { initLogger } from "./logger.js";
@@ -8,8 +9,30 @@ import { preToolUseHandler } from "./handlers/pre-tool-use.js";
 import { postToolUseHandler } from "./handlers/post-tool-use.js";
 import policiesRouter from "./api/policies.js";
 import auditRouter from "./api/audit.js";
+import {
+  initAuth,
+  apiKeyAuth,
+  adminAuth,
+  loginHandler,
+  logoutHandler,
+  meHandler,
+  getApiKeyCount,
+  getAdminUserCount,
+  isAuthEnabled,
+} from "./middleware/auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ── Load .env (before anything reads process.env) ──────────────────
+
+dotenv.config({ path: resolve(__dirname, "../.env") });
+
+// ── Initialize auth (after dotenv) ─────────────────────────────────
+
+initAuth();
+
+// ── Express app ────────────────────────────────────────────────────
+
 const app = express();
 
 app.use(express.json());
@@ -38,15 +61,13 @@ const auditLogFile =
   process.env.AUDIT_LOG || resolve(policyDir, "audit.jsonl");
 initLogger(auditLogFile);
 
-// ── Hook endpoints (Claude Code calls these) ───────────────────────
+// ── Auth routes (before middleware) ────────────────────────────────
 
-app.post("/hooks/pre-tool-use", preToolUseHandler);
-app.post("/hooks/post-tool-use", postToolUseHandler);
+app.post("/api/auth/login", loginHandler);
+app.post("/api/auth/logout", logoutHandler);
+app.get("/api/auth/me", meHandler);
 
-// ── Admin API ──────────────────────────────────────────────────────
-
-app.use("/api/policies", policiesRouter);
-app.use("/api/audit", auditRouter);
+// ── Health check (no auth) ─────────────────────────────────────────
 
 app.get("/api/health", (_req, res) => {
   const config = getPolicies();
@@ -61,6 +82,16 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// ── Hook endpoints (Claude Code calls these) ───────────────────────
+
+app.post("/hooks/pre-tool-use", apiKeyAuth, preToolUseHandler);
+app.post("/hooks/post-tool-use", apiKeyAuth, postToolUseHandler);
+
+// ── Admin API (requires admin auth) ────────────────────────────────
+
+app.use("/api/policies", adminAuth, policiesRouter);
+app.use("/api/audit", adminAuth, auditRouter);
+
 // ── Admin UI (static files) ────────────────────────────────────────
 
 app.use(express.static(resolve(__dirname, "ui")));
@@ -68,11 +99,18 @@ app.use(express.static(resolve(__dirname, "ui")));
 // ── Start server ───────────────────────────────────────────────────
 
 const PORT = parseInt(process.env.POLICY_PORT || "3456");
+const HOST = process.env.POLICY_HOST || "127.0.0.1";
+const keyCount = getApiKeyCount();
+const userCount = getAdminUserCount();
 
-app.listen(PORT, "127.0.0.1", () => {
-  console.log(`[server] Policy enforcement server running on http://localhost:${PORT}`);
-  console.log(`[server] Admin UI: http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  const baseUrl = HOST === "0.0.0.0" ? `http://localhost:${PORT}` : `http://${HOST}:${PORT}`;
+  console.log(`[server] Policy enforcement server running on ${HOST}:${PORT}`);
+  console.log(`[server] Admin UI: ${baseUrl}`);
   console.log(`[server] Hook endpoints:`);
-  console.log(`  POST http://localhost:${PORT}/hooks/pre-tool-use`);
-  console.log(`  POST http://localhost:${PORT}/hooks/post-tool-use`);
+  console.log(`  POST ${baseUrl}/hooks/pre-tool-use`);
+  console.log(`  POST ${baseUrl}/hooks/post-tool-use`);
+  console.log(`[server] API Keys: ${keyCount} configured`);
+  console.log(`[server] Admin Users: ${userCount} configured`);
+  console.log(`[server] Auth: ${isAuthEnabled() ? "enabled" : "disabled"}`);
 });

@@ -34,6 +34,8 @@ router.get("/stats", (_req, res) => {
 });
 
 // GET /api/audit/stream - SSE realtime feed
+// Note: adminAuth middleware already handles token via query param (?token=xxx)
+// since EventSource does not support custom headers.
 router.get("/stream", (req, res) => {
   addSSEClient(res);
 });

@@ -23,6 +23,7 @@ export function preToolUseHandler(req: Request, res: Response): void {
     reason: result.reason,
     detail: result.detail,
     cwd: input.cwd,
+    api_key_name: req.apiKeyName,
   });
 
   if (result.decision === "deny") {

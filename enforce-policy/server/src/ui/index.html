@@ -10,6 +10,33 @@
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen" x-data="app()" x-init="init()">
 
+  <!-- Login Overlay -->
+  <div x-show="showLogin" x-transition class="fixed inset-0 bg-gray-950/95 z-50 flex items-center justify-center">
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-8 w-full max-w-sm">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">P</div>
+        <h2 class="text-lg font-semibold">Policy Enforcement</h2>
+      </div>
+      <form @submit.prevent="login()">
+        <div class="mb-4">
+          <label class="block text-xs text-gray-400 mb-1.5">Username</label>
+          <input type="text" x-model="loginUsername" required autofocus
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-gray-400 mb-1.5">Password</label>
+          <input type="password" x-model="loginPassword" required
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div x-show="loginError" class="mb-4 text-xs text-red-400" x-text="loginError"></div>
+        <button type="submit"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+          Sign In
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Header -->
   <header class="bg-gray-900 border-b border-gray-800 px-6 py-4">
     <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -19,6 +46,12 @@
         <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">Admin</span>
       </div>
       <div class="flex items-center gap-4">
+        <template x-if="username">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400" x-text="username"></span>
+            <button @click="logout()" class="text-xs text-gray-500 hover:text-gray-300 bg-gray-800 hover:bg-gray-700 px-2 py-1 rounded transition-colors">Logout</button>
+          </div>
+        </template>
         <span class="text-xs text-gray-500" x-text="'Uptime: ' + health.uptime"></span>
         <span class="w-2 h-2 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></span>
       </div>

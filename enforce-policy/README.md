@@ -23,7 +23,7 @@ HTTP-based policy enforcement server for Claude Code. Block dangerous commands, 
 | **Type** | HTTP hook |
 | **Events** | `PreToolUse` (all tools), `PostToolUse` (Write, Edit) |
 | **Behavior** | Evaluates tool calls against YAML-defined policies. Blocks dangerous commands, restricts file access, detects hardcoded secrets. |
-| **Output** | Returns `allow`, `deny`, or `block` decisions. Logs all decisions to JSONL audit file. |
+| **Output** | Returns `allow`, `deny`, or `block` decisions. Logs all decisions to the configured audit database backend. |
 | **Admin UI** | Dashboard with live stats, policy management, and filterable audit log at `http://localhost:3456`. |
 
 ### How it works
@@ -36,9 +36,18 @@ HTTP-based policy enforcement server for Claude Code. Block dangerous commands, 
 
 ## Prerequisites
 
-- **Node.js** >= 18
+- **Node.js** >= 22
 - **npm** (comes with Node.js)
 - **Claude Code** CLI installed
+
+### Node.js runtime note
+
+The server currently uses the built-in `node:sqlite` module for SQLite audit storage. That API is only available in newer Node.js releases and is still marked experimental by Node.js.
+
+Important:
+- Run the server with **Node.js 22+**
+- This requirement currently applies even when you configure `AUDIT_BACKEND=postgres`, because the server imports `node:sqlite` at startup
+- If you need broader Node compatibility later, the SQLite implementation should be moved to a separate module or replaced with a stable external package
 
 ## File structure
 
@@ -51,7 +60,7 @@ enforce-policy/
 │   └── src/
 │       ├── index.ts              # Express server entry point
 │       ├── engine.ts             # Policy loading + evaluation engine
-│       ├── logger.ts             # Audit logger (JSONL + ring buffer + SSE)
+│       ├── logger.ts             # Audit logger (SQLite/Postgres + ring buffer + SSE)
 │       ├── middleware/
 │       │   └── auth.ts           # API key + admin auth middleware
 │       ├── handlers/

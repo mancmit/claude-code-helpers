@@ -1,3 +1,5 @@
 policies.yml
-audit.jsonl
+audit.sqlite
+audit.sqlite-shm
+audit.sqlite-wal
 **/.env

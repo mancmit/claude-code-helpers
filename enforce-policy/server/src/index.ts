@@ -4,7 +4,7 @@ import { existsSync, copyFileSync } from "node:fs";
 import dotenv from "dotenv";
 import express from "express";
 import { loadPolicies, watchPolicies, getPolicies } from "./engine.js";
-import { initLogger } from "./logger.js";
+import { initLogger, type AuditBackend } from "./logger.js";
 import { preToolUseHandler } from "./handlers/pre-tool-use.js";
 import { postToolUseHandler } from "./handlers/post-tool-use.js";
 import policiesRouter from "./api/policies.js";
@@ -57,9 +57,33 @@ if (existsSync(policyFile)) {
 
 // ── Audit log ──────────────────────────────────────────────────────
 
-const auditLogFile =
-  process.env.AUDIT_LOG || resolve(policyDir, "audit.jsonl");
-initLogger(auditLogFile);
+const auditConfig = getPolicies()?.audit;
+
+function parseAuditBackend(value?: string): AuditBackend {
+  if (!value || value === "sqlite") return "sqlite";
+  if (value === "postgres") return "postgres";
+  throw new Error(
+    `Invalid audit backend '${value}'. Supported values are 'sqlite' and 'postgres'.`
+  );
+}
+
+const auditBackend = parseAuditBackend(
+  process.env.AUDIT_BACKEND || auditConfig?.backend
+);
+const auditDbFile = resolve(
+  policyDir,
+  process.env.AUDIT_SQLITE_DB || auditConfig?.db_file || "audit.sqlite"
+);
+const auditPostgresUrl =
+  process.env.AUDIT_POSTGRES_URL ||
+  process.env.DATABASE_URL ||
+  auditConfig?.postgres_url;
+
+await initLogger({
+  backend: auditBackend,
+  sqliteFile: auditBackend === "sqlite" ? auditDbFile : undefined,
+  postgresUrl: auditBackend === "postgres" ? auditPostgresUrl : undefined,
+});
 
 // ── Auth routes (before middleware) ────────────────────────────────
 

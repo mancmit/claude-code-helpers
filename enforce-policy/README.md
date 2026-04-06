@@ -195,6 +195,8 @@ Server `.env` file (`enforce-policy/server/.env`):
 AUTH_ENABLED=true
 API_KEYS="dev:key123,ci:key456"
 ADMIN_USERS="admin:adminpass"
+AUDIT_BACKEND="sqlite"
+AUDIT_SQLITE_DB="./audit.sqlite"
 ```
 
 Client (`~/.zshenv`):
@@ -229,7 +231,9 @@ version: 1
 
 audit:
   enabled: true
-  log_file: audit.jsonl
+  backend: sqlite
+  db_file: audit.sqlite
+  # postgres_url: postgres://user:pass@localhost:5432/enforce_policy
 
 policies:
   - name: Policy name                # Unique identifier
@@ -294,6 +298,9 @@ Open `http://localhost:3456` in your browser.
 - Filterable table: Time, Decision, Policy, Tool, Detail
 - Filters: decision, tool, date range, session ID
 - Pagination and JSON export
+- Configure `audit.backend` or `AUDIT_BACKEND` as `sqlite` or `postgres`
+- Audit data is stored only in the selected database backend; JSONL file storage is no longer used
+- `audit.db_file` / `AUDIT_SQLITE_DB` is used for SQLite, and `audit.postgres_url` / `AUDIT_POSTGRES_URL` is used for Postgres
 
 ## API reference
 

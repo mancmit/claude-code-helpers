@@ -27,7 +27,12 @@ export interface Policy {
 
 export interface PolicyConfig {
   version: number;
-  audit: { enabled: boolean; log_file: string };
+  audit: {
+    enabled: boolean;
+    backend?: "sqlite" | "postgres";
+    db_file?: string;
+    postgres_url?: string;
+  };
   policies: Policy[];
 }
 
